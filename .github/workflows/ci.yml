@@ -1,0 +1,20 @@
+name: Verify GoldPrice
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify portfolio, quotes and alert conditions
+        run: swift test
+      - name: Build native application
+        run: swift build -c release

@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: write
 
@@ -29,6 +29,9 @@ jobs:
 
       - name: Build for Apple Silicon (arm64)
         run: swift build -c release --arch arm64
+
+      - name: Test portfolio and alert logic
+        run: swift test
 
       - name: Build for Intel (x86_64)
         run: swift build -c release --arch x86_64
@@ -56,6 +59,8 @@ jobs:
             /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon.icns" "${CONTENTS_DIR}/Info.plist"
             echo "APPL????" > "${CONTENTS_DIR}/PkgInfo"
             chmod +x "${CONTENTS_DIR}/MacOS/GoldPrice"
+            codesign --force --deep --sign - "${APP_BUNDLE}"
+            codesign --verify --deep --strict "${APP_BUNDLE}"
           }
 
           create_app_bundle "arm64"  ".build/arm64-apple-macosx/release/GoldPrice"
