@@ -15,10 +15,12 @@ private struct SavedState: Codable {
     var schemaVersion: Int = 1
     var preferences = AppPreferences()
     var quotes: [String: MarketQuote] = [:]
-    var localHistory: [String: [PricePoint]] = [:]
     var londonDaily: [PricePoint] = []
     var londonMinutes: [PricePoint] = []
     var dailyFetchedAt: Date?
+    var domesticDaily: [PricePoint]?
+    var domesticMinutes: [PricePoint]?
+    var domesticDailyFetchedAt: Date?
     var trades: [Trade] = []
     var alerts: [PriceRule] = []
 }
@@ -29,15 +31,16 @@ final class AppStore: ObservableObject {
     @Published private(set) var quotes: [String: MarketQuote] = [:]
     @Published private(set) var trades: [Trade] = []
     @Published private(set) var alerts: [PriceRule] = []
-    @Published private(set) var localHistory: [String: [PricePoint]] = [:]
     @Published private(set) var londonDaily: [PricePoint] = []
     @Published private(set) var londonMinutes: [PricePoint] = []
+    @Published private(set) var domesticDaily: [PricePoint] = []
+    @Published private(set) var domesticMinutes: [PricePoint] = []
     @Published private(set) var isRefreshing = false
     @Published private(set) var isLoadingHistory = false
     @Published private(set) var channelErrors: [String: String] = [:]
     @Published var message: String?
     @Published var activeTab: AppTab = .market
-    @Published var chartChannel: QuoteChannel = .cmbSell
+    @Published var chartMarket: TrendMarket = .domestic
     @Published var chartRange: TrendRange = .day
     @Published private(set) var notificationAllowed = false
     @Published private(set) var loginEnabled = false
@@ -47,6 +50,7 @@ final class AppStore: ObservableObject {
     private var timer: Timer?
     private var historyFetchedAt: Date?
     private var dailyFetchedAt: Date?
+    private var domesticDailyFetchedAt: Date?
     private var notificationsInFlight = Set<UUID>()
     private var persistenceBlocked = false
 
@@ -71,17 +75,19 @@ final class AppStore: ObservableObject {
                 quotes = state.quotes
                 trades = state.trades
                 alerts = state.alerts
-                localHistory = state.localHistory
                 londonDaily = state.londonDaily
                 londonMinutes = state.londonMinutes
                 dailyFetchedAt = state.dailyFetchedAt
+                domesticDaily = state.domesticDaily ?? []
+                domesticMinutes = state.domesticMinutes ?? []
+                domesticDailyFetchedAt = state.domesticDailyFetchedAt
             }
         } catch {
             // A broken file must never be silently overwritten with an empty portfolio.
             persistenceBlocked = true
             message = "本地数据读取失败，已停止写入以保护原文件。请先导出数据备份。"
         }
-        chartChannel = preferences.displayChannel
+        chartMarket = preferences.displayChannel.isDomestic ? .domestic : .london
         loginEnabled = Bundle.main.bundleIdentifier != nil && SMAppService.mainApp.status == .enabled
     }
 
@@ -152,60 +158,59 @@ final class AppStore: ObservableObject {
 
     private func accept(_ quote: MarketQuote) {
         quotes[quote.channel.rawValue] = quote
-        guard quote.isFresh(at: Date()) else { return }
-        let minute = floor(quote.timestamp.timeIntervalSince1970 / 60) * 60
-        var points = localHistory[quote.channel.rawValue] ?? []
-        let point = PricePoint(date: Date(timeIntervalSince1970: minute), value: quote.price.doubleValue)
-        if let last = points.last, last.date == point.date {
-            points[points.count - 1] = point
-        } else if points.last.map({ $0.date < point.date }) ?? true {
-            points.append(point)
-        }
-        // Keep recent minute points and older daily closes, without inventing gaps.
-        let cutoff = Date().addingTimeInterval(-7 * 86400)
-        var daily: [String: PricePoint] = [:]
-        var recent: [PricePoint] = []
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        for p in points {
-            if p.date >= cutoff { recent.append(p) }
-            else { daily[formatter.string(from: p.date)] = p }
-        }
-        localHistory[quote.channel.rawValue] = daily.values.sorted { $0.date < $1.date } + recent
     }
 
     func loadHistory(forceDaily: Bool = false) async {
         guard !isLoadingHistory else { return }
         isLoadingHistory = true
         defer { isLoadingHistory = false }
-        let needsDaily = forceDaily || londonDaily.isEmpty || !(dailyFetchedAt.map { Calendar.current.isDateInToday($0) } ?? false)
-        let daily: Result<[PricePoint], Error> = needsDaily
-            ? await capture { try await self.service.londonHistory(intraday: false) }
-            : .success(londonDaily)
-        let minutes = await capture { try await self.service.londonHistory(intraday: true) }
-        if case .success(let points) = daily {
-            londonDaily = points
-            if needsDaily { dailyFetchedAt = Date() }
-        }
-        if case .success(let points) = minutes { londonMinutes = points }
-        if case .failure(let error) = daily {
-            NSLog("[GoldPrice] 伦敦日线加载失败：%@", error.localizedDescription)
-            channelErrors["history"] = "伦敦日线暂时连接不上，可点击右上角刷新重试。"
-        } else if case .failure(let error) = minutes {
-            NSLog("[GoldPrice] 伦敦分钟线加载失败：%@", error.localizedDescription)
-            channelErrors["history"] = "伦敦分钟线暂时连接不上，可点击右上角刷新重试。"
-        } else { channelErrors.removeValue(forKey: "history") }
+        async let domestic: Void = loadHistory(market: .domestic, forceDaily: forceDaily)
+        async let london: Void = loadHistory(market: .london, forceDaily: forceDaily)
+        _ = await (domestic, london)
         historyFetchedAt = Date()
         save()
     }
 
-    func chartPoints(channel: QuoteChannel, range: TrendRange) -> [PricePoint] {
+    private func loadHistory(market: TrendMarket, forceDaily: Bool) async {
+        let cachedDaily = market == .domestic ? domesticDaily : londonDaily
+        let fetchedAt = market == .domestic ? domesticDailyFetchedAt : dailyFetchedAt
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let needsDaily = forceDaily || cachedDaily.isEmpty || !(fetchedAt.map { calendar.isDateInToday($0) } ?? false)
+        async let daily = capture { () async throws -> [PricePoint] in
+            if needsDaily { return try await self.service.history(market: market, intraday: false) }
+            return cachedDaily
+        }
+        async let minutes = capture { try await self.service.history(market: market, intraday: true) }
+        let (dailyResult, minuteResult) = await (daily, minutes)
+        if case .success(let points) = dailyResult {
+            if market == .domestic {
+                domesticDaily = points
+                if needsDaily { domesticDailyFetchedAt = Date() }
+            } else {
+                londonDaily = points
+                if needsDaily { dailyFetchedAt = Date() }
+            }
+        }
+        if case .success(let points) = minuteResult {
+            if market == .domestic { domesticMinutes = points }
+            else { londonMinutes = points }
+        }
+        for (interval, result) in [("daily", dailyResult), ("minute", minuteResult)] {
+            let key = "\(market.rawValue)-\(interval)"
+            if case .failure(let error) = result {
+                NSLog("[GoldPrice] %@ 历史加载失败：%@", market.title, error.localizedDescription)
+                channelErrors[key] = "\(market.title)\(interval == "daily" ? "日线" : "分钟线")暂时连接不上，显示已缓存行情，可刷新重试。"
+            } else { channelErrors.removeValue(forKey: key) }
+        }
+    }
+
+    func chartPoints(market: TrendMarket, range: TrendRange) -> [PricePoint] {
         let points: [PricePoint]
-        if channel == .london {
+        if market == .london {
             points = range == .day ? londonMinutes : londonDaily
         } else {
-            points = localHistory[channel.rawValue] ?? []
+            points = range == .day ? domesticMinutes : domesticDaily
         }
         let start = range.start()
         let filtered = points.filter { (start == nil || $0.date >= start!) && $0.date <= Date() }
@@ -314,8 +319,9 @@ final class AppStore: ObservableObject {
     }
 
     private func state() -> SavedState {
-        SavedState(preferences: preferences, quotes: quotes, localHistory: localHistory,
+        SavedState(preferences: preferences, quotes: quotes,
                    londonDaily: londonDaily, londonMinutes: londonMinutes, dailyFetchedAt: dailyFetchedAt,
+                   domesticDaily: domesticDaily, domesticMinutes: domesticMinutes, domesticDailyFetchedAt: domesticDailyFetchedAt,
                    trades: trades, alerts: alerts)
     }
     private func ensureWritable() throws {

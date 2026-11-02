@@ -41,4 +41,29 @@ final class MarketTests: XCTestCase {
         XCTAssertEqual(try QuoteParser.eastmoney(data).first?.value, 4065.74)
         XCTAssertThrowsError(try QuoteParser.eastmoney(Data(#"{"data":{"code":"GC","klines":[]}}"#.utf8)))
     }
+    func testDomesticHistoryUsesAu9999ClosingPricesInDateOrder() throws {
+        let data = Data(#"{"data":{"code":"AU9999","klines":["2026-11-02,851,837.5,855,836,50","2004-01-02,111,111.18,111.2,111,50"]}}"#.utf8)
+        let points = try QuoteParser.eastmoney(data, market: .domestic)
+        XCTAssertEqual(points.map(\.value), [111.18, 837.5])
+        XCTAssertEqual(points.first?.date, QuoteParser.date("2004-01-02", formats: ["yyyy-MM-dd"]))
+        XCTAssertThrowsError(try QuoteParser.eastmoney(data, market: .london))
+    }
+
+    func testDomesticHistoryRejectsBankSubstitutesAndEmptyResponses() throws {
+        for code in ["XAU", "GC", "AU0"] {
+            let data = Data("{\"data\":{\"code\":\"\(code)\",\"klines\":[\"2026-11-02,851,837.5\"]}}".utf8)
+            XCTAssertThrowsError(try QuoteParser.eastmoney(data, market: .domestic))
+        }
+        XCTAssertThrowsError(try QuoteParser.eastmoney(Data(#"{"data":null}"#.utf8), market: .domestic))
+        XCTAssertThrowsError(try QuoteParser.eastmoney(Data(#"{"data":{"code":"AU9999","klines":[]}}"#.utf8), market: .domestic))
+    }
+
+    func testDomesticMinuteHistorySkipsInvalidPrices() throws {
+        let data = Data(#"{"data":{"code":"AU9999","klines":["2026-11-02 09:31,840,837.5,841,836,1","bad row","2026-11-02 09:32,840,nan","2026-11-02 09:33,840,-1"]}}"#.utf8)
+        let points = try QuoteParser.eastmoney(data, market: .domestic)
+        XCTAssertEqual(points.count, 1)
+        XCTAssertEqual(points.first?.value, 837.5)
+        XCTAssertEqual(points.first?.date, QuoteParser.date("2026-11-02 09:31", formats: ["yyyy-MM-dd HH:mm"]))
+    }
+
 }

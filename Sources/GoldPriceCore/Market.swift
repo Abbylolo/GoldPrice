@@ -21,6 +21,16 @@ public enum QuoteChannel: String, Codable, CaseIterable, Identifiable {
     public var isDomestic: Bool { self != .london }
 }
 
+/// A chart instrument is separate from a bank's customer quote channel.
+public enum TrendMarket: String, CaseIterable, Identifiable {
+    case domestic, london
+    public var id: String { rawValue }
+    public var title: String { self == .domestic ? "上金所 Au99.99" : "伦敦现货金" }
+    public var unit: String { self == .domestic ? "元/克" : "美元/盎司" }
+    public var providerCode: String { self == .domestic ? "AU9999" : "XAU" }
+    public var securityID: String { self == .domestic ? "118.AU9999" : "122.XAU" }
+}
+
 public struct MarketQuote: Codable, Equatable {
     public var channel: QuoteChannel
     public var price: Decimal
@@ -161,9 +171,9 @@ public enum QuoteParser {
                            timestamp: timestamp, receivedAt: receivedAt)
     }
 
-    public static func eastmoney(_ data: Data) throws -> [PricePoint] {
+    public static func eastmoney(_ data: Data, market: TrendMarket = .london) throws -> [PricePoint] {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let body = json["data"] as? [String: Any], body["code"] as? String == "XAU",
+              let body = json["data"] as? [String: Any], body["code"] as? String == market.providerCode,
               let rows = body["klines"] as? [String] else { throw MarketDataError.noData }
         let dailyFormatter = formatter("yyyy-MM-dd")
         let minuteFormatter = formatter("yyyy-MM-dd HH:mm")
@@ -171,7 +181,7 @@ public enum QuoteParser {
             let fields = row.split(separator: ",", omittingEmptySubsequences: false)
             guard fields.count >= 3,
                   let date = (fields[0].count > 10 ? minuteFormatter : dailyFormatter).date(from: String(fields[0])),
-                  let close = Double(fields[2]), close > 0 else { return nil }
+                  let close = Double(fields[2]), close.isFinite, close > 0 else { return nil }
             return PricePoint(date: date, value: close)
         }
         guard !points.isEmpty else { throw MarketDataError.noData }

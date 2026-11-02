@@ -1,6 +1,6 @@
 # Repository guidance
 
-GoldPrice is Abbylolo's native macOS menu-bar tracker, forked from Tespera/GoldPrice. Scope is CMB customer buy/sell gold-account prices and London spot XAU. Keep the interface in Simplified Chinese and preserve this narrow scope.
+GoldPrice is Abbylolo's native macOS menu-bar tracker, forked from Tespera/GoldPrice. Scope is CMB customer buy/sell gold-account prices, SGE Au99.99 domestic reference trends and London spot XAU. Keep the interface in Simplified Chinese and preserve this narrow scope.
 
 ## Build
 
@@ -19,7 +19,7 @@ Bundle ID is `com.abbylolo.goldprice`; the app uses `LSUIElement=true`. The `--p
 - `GoldPriceApp.swift`: application and notification delegate.
 - `StatusBarController.swift`: status item, popover and development preview window.
 - `GoldPriceView.swift`: market, holdings, alerts and preferences.
-- `GoldPriceService.swift`: URLSession requests to CMB/Sina and XAU minutes; system curl for the large Eastmoney XAU daily response, cached daily.
+- `GoldPriceService.swift`: URLSession requests to CMB/Sina; system curl for Eastmoney Au99.99/XAU histories, with transient-error retry and cached daily history.
 - `AppStore.swift`: MainActor state, refresh, JSON persistence, alert delivery and login-item registration.
 - `Sources/GoldPriceCore`: Foundation-only quote parsers, moving weighted-average portfolio and alert conditions.
 - `Tests/GoldPriceCoreTests`: business-logic and parser tests; run these before changing cost or notification rules.
@@ -28,7 +28,7 @@ Bundle ID is `com.abbylolo.goldprice`; the app uses `LSUIElement=true`. The `--p
 
 - `cmbBuy` is the customer's purchase price; `cmbSell` is the customer's selling price. Holdings are valued with `cmbSell` in CNY/gram.
 - London XAU is spot gold in USD/troy ounce. Never substitute gold futures or relabel another instrument as XAU.
-- CMB history is locally recorded actual observations. Do not invent past CMB prices or relabel another domestic series as CMB history.
+- Domestic trends are SGE Au99.99 from Eastmoney `118.AU9999`, separate from CMB quote channels. Never label them as CMB buy/sell history or use them for CMB holdings/alerts. Do not collect local quote history. Old state remains readable and financial data must be preserved.
 - Keep provider timestamps and show stale quote states. Stale or explicitly closed-market quotes cannot fire alerts.
 - Monetary calculations use Decimal. Buying includes explicit total fees; selling realizes profit and preserves remaining average cost. Reject historical overselling when adding or removing trades.
 - A price rule fires once, is persisted as disabled after notification submission and can be re-enabled by the user.

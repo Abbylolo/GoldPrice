@@ -30,25 +30,25 @@ struct GoldPriceService {
         return try QuoteParser.london(await request(req))
     }
 
-    func londonHistory(intraday: Bool) async throws -> [PricePoint] {
+    func history(market: TrendMarket, intraday: Bool) async throws -> [PricePoint] {
         let interval = intraday ? 1 : 101
-        let limit = intraday ? 1500 : 400
-        let url = URL(string: "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=122.XAU&klt=\(interval)&fqt=0&beg=0&end=20500101&lmt=\(limit)&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56")!
-        // The system client handles this host's large daily response more
-        // consistently than CFNetwork. The returned coverage is shown in UI.
-        if !intraday { return try QuoteParser.eastmoney(await downloadDailyHistory(url)) }
-        var req = URLRequest(url: url)
-        req.setValue("https://quote.eastmoney.com/", forHTTPHeaderField: "Referer")
-        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
-        do { return try QuoteParser.eastmoney(await request(req)) }
-        catch {
-            guard !Task.isCancelled else { throw error }
-            try await Task.sleep(nanoseconds: 500_000_000)
-            return try QuoteParser.eastmoney(await request(req))
+        let limit = intraday ? 1500 : 10000
+        let base = "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=\(market.securityID)&klt=\(interval)&fqt=0&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56"
+        let queries = ["&lmt=\(limit)", "&beg=0&lmt=\(intraday ? 1500 : 400)"]
+        // Use the same client for both instruments, and retry transient empty replies.
+        for attempt in 0..<2 {
+            do {
+                let url = URL(string: base + queries[attempt])!
+                return try QuoteParser.eastmoney(await downloadHistory(url), market: market)
+            } catch {
+                guard attempt == 0, !Task.isCancelled else { throw error }
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
         }
+        throw MarketDataError.noData
     }
 
-    private func downloadDailyHistory(_ url: URL) async throws -> Data {
+    private func downloadHistory(_ url: URL) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 do {

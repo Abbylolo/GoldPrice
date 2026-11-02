@@ -107,7 +107,9 @@ struct GoldPriceView: View {
                         }.padding(12).background(Palette.gold.opacity(0.09)).clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                     switch store.activeTab {
-                    case .market: MarketScreen(store: store)
+                    case .market:
+                        MarketScreen(store: store)
+                            .id("\(store.chartMarket.rawValue)-\(store.chartRange.rawValue)")
                     case .portfolio: PortfolioScreen(store: store)
                     case .alerts: AlertsScreen(store: store)
                     case .settings: SettingsScreen(store: store)
@@ -133,7 +135,7 @@ private struct MarketScreen: View {
     @ObservedObject var store: AppStore
     @State private var inspectedPoint: PricePoint?
 
-    private var points: [PricePoint] { store.chartPoints(channel: store.chartChannel, range: store.chartRange) }
+    private var points: [PricePoint] { store.chartPoints(market: store.chartMarket, range: store.chartRange) }
     private var bounds: ClosedRange<Double> {
         let low = points.map(\.value).min() ?? 0
         let high = points.map(\.value).max() ?? 1
@@ -144,21 +146,21 @@ private struct MarketScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                sourceButton("招商银行", domestic: true)
-                sourceButton("伦敦现货", domestic: false)
+                sourceButton("国内黄金", market: .domestic)
+                sourceButton("伦敦现货", market: .london)
                 Spacer()
             }
-            if store.chartChannel.isDomestic {
+            if store.chartMarket == .domestic {
                 HStack(spacing: 12) {
                     QuoteCard(store: store, channel: .cmbBuy)
                     QuoteCard(store: store, channel: .cmbSell)
                 }
             } else { QuoteCard(store: store, channel: .london) }
 
-            if let error = store.channelErrors[store.chartChannel.isDomestic ? "cmb" : "london"] {
+            if let error = store.channelErrors[store.chartMarket == .domestic ? "cmb" : "london"] {
                 Label(error, systemImage: "wifi.exclamationmark").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            if store.chartChannel == .london, let error = store.channelErrors["history"] {
+            if let error = store.channelErrors["\(store.chartMarket.rawValue)-\(store.chartRange == .day ? "minute" : "daily")"] {
                 Label(error, systemImage: "chart.line.downtrend.xyaxis").font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
@@ -166,9 +168,9 @@ private struct MarketScreen: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("金价趋势").font(.system(size: 15, weight: .semibold))
-                        Text("\(store.chartChannel.title) · \(store.chartChannel.unit)").font(.system(size: 10)).foregroundStyle(.secondary)
-                        if store.chartChannel.isDomestic {
-                            Text("本机真实记录 · 长期历史暂未接入").font(.system(size: 9)).foregroundStyle(Palette.gold)
+                        Text("\(store.chartMarket.title) · \(store.chartMarket.unit)").font(.system(size: 10)).foregroundStyle(.secondary)
+                        if store.chartMarket == .domestic {
+                            Text("公开历史行情 · 东方财富").font(.system(size: 9)).foregroundStyle(Palette.gold)
                         }
                     }
                     Spacer()
@@ -194,7 +196,7 @@ private struct MarketScreen: View {
                 if points.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: store.isLoadingHistory ? "hourglass" : "chart.line.uptrend.xyaxis").font(.system(size: 26)).foregroundStyle(Palette.gold.opacity(0.6))
-                        Text(store.isLoadingHistory && store.chartChannel == .london ? "正在读取历史行情…" : "这个时段还没有记录")
+                        Text(store.isLoadingHistory ? "正在读取历史行情…" : "这个时段暂无公开行情，可刷新重试")
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity).frame(height: 190)
                 } else {
@@ -240,20 +242,20 @@ private struct MarketScreen: View {
                     }
                 }
 
-                if store.chartChannel.isDomestic {
-                    Text("这里仅展示本机记录；应用运行时持续积累，未采集的历史时段不会补成其他渠道的价格。")
+                if store.chartMarket == .domestic {
+                    Text("东方财富 Au99.99 \(store.chartRange == .day ? "分钟线 · 北京时间" : "日线 · 全部从数据源最早记录起")。国内趋势为上金所 Au99.99 行情，与上方招行买卖报价存在价差。")
                         .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text(store.chartRange == .day ? "东方财富 XAU 分钟线 · 北京时间" : "东方财富 XAU 日线（含当日最新价）· “全部”从数据源最早记录起")
+                    Text(store.chartRange == .day ? "东方财富 XAU 分钟线 · 北京时间" : "东方财富 XAU 日线· “全部”从数据源最早记录起")
                         .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }.modifier(SoftCard())
         }
     }
 
-    private func sourceButton(_ title: String, domestic: Bool) -> some View {
-        let selected = store.chartChannel.isDomestic == domestic
-        return Button { store.chartChannel = domestic ? .cmbSell : .london; inspectedPoint = nil } label: {
+    private func sourceButton(_ title: String, market: TrendMarket) -> some View {
+        let selected = store.chartMarket == market
+        return Button { store.chartMarket = market; inspectedPoint = nil } label: {
             Text(title).font(.system(size: 12, weight: selected ? .semibold : .regular))
                 .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(selected ? Palette.gold.opacity(0.11) : .clear)
@@ -295,14 +297,7 @@ private struct QuoteCard: View {
                 Text("较昨收 \(money(change, signed: true))%")
                     .font(.system(size: 10, weight: .medium)).foregroundStyle(change >= 0 ? Palette.rise : Palette.mint)
             }
-            if channel.isDomestic {
-                Button {
-                    store.chartChannel = channel
-                } label: {
-                    Text(store.chartChannel == channel ? "正在查看此价走势" : "查看此价走势")
-                        .font(.system(size: 9)).foregroundStyle(Palette.gold)
-                }.buttonStyle(.plain)
-            }
+
         }.modifier(SoftCard(tint: channel == .cmbBuy ? Palette.gold : channel == .cmbSell ? Palette.mint : Palette.lilac))
     }
 }
