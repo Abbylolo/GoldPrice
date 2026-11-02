@@ -19,7 +19,7 @@ Bundle ID is `com.abbylolo.goldprice`; the app uses `LSUIElement=true`. The `--p
 - `GoldPriceApp.swift`: application and notification delegate.
 - `StatusBarController.swift`: status item, popover and development preview window.
 - `GoldPriceView.swift`: market, holdings, alerts and preferences.
-- `GoldPriceService.swift`: URLSession requests to CMB/Sina; system curl for Eastmoney Au99.99/XAU histories, with transient-error retry and cached daily history.
+- `GoldPriceService.swift`: URLSession requests to CMB/Sina and Eastmoney minutes; system curl for Au99.99/XAU daily history. Switch clients once on transient errors and retain cached daily history.
 - `AppStore.swift`: MainActor state, refresh, JSON persistence, alert delivery and login-item registration.
 - `Sources/GoldPriceCore`: Foundation-only quote parsers, moving weighted-average portfolio and alert conditions.
 - `Tests/GoldPriceCoreTests`: business-logic and parser tests; run these before changing cost or notification rules.
