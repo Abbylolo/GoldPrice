@@ -18,10 +18,10 @@ Bundle ID is `com.abbylolo.goldprice`; the app uses `LSUIElement=true`. The `--p
 
 - `GoldPriceApp.swift`: application and notification delegate.
 - `StatusBarController.swift`: status item, popover and development preview window.
-- `GoldPriceView.swift`: market, holdings, alerts and preferences.
+- `GoldPriceView.swift`: compact 380×580 market, holdings, alerts and preferences; static chart and hover overlay have separate update paths.
 - `GoldPriceService.swift`: URLSession requests to CMB/Sina and Eastmoney minutes; system curl for Au99.99/XAU daily history. Switch clients once on transient errors and retain cached daily history.
 - `AppStore.swift`: MainActor state, refresh, JSON persistence, alert delivery and login-item registration.
-- `Sources/GoldPriceCore`: Foundation-only quote parsers, moving weighted-average portfolio and alert conditions.
+- `Sources/GoldPriceCore`: Foundation-only quote parsers, prepared trend snapshots and binary-search inspection, moving weighted-average portfolio and alert conditions.
 - `Tests/GoldPriceCoreTests`: business-logic and parser tests; run these before changing cost or notification rules.
 
 ## Data rules
@@ -35,3 +35,5 @@ Bundle ID is `com.abbylolo.goldprice`; the app uses `LSUIElement=true`. The `--p
 - Corrupt local data must not be overwritten with a new empty portfolio.
 
 The default data location is Application Support/GoldPricePersonal/state.json. Keep it separate from the original app's data and bundle identity.
+
+Build chart snapshots only when history, market or range changes. Never filter history or recalculate bounds inside chart marks or hover callbacks. Panel dimensions come from `PanelLayout`.

@@ -60,7 +60,7 @@ public struct MarketQuote: Codable, Equatable {
     }
 }
 
-public struct PricePoint: Codable, Identifiable, Equatable {
+public struct PricePoint: Codable, Identifiable, Equatable, Sendable {
     public var date: Date
     public var value: Double
     public var id: Date { date }

@@ -18,7 +18,7 @@ final class StatusBarController: NSObject {
             button.action = #selector(toggle)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        popover.contentSize = NSSize(width: 540, height: 700)
+        popover.contentSize = NSSize(width: PanelLayout.width, height: PanelLayout.height)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: GoldPriceView(store: store))
         cancellable = store.objectWillChange.sink { [weak self] _ in
@@ -55,7 +55,7 @@ final class StatusBarController: NSObject {
 
     private func showPreviewWindow() {
         NSApp.setActivationPolicy(.regular)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 700), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelLayout.width, height: PanelLayout.height), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "GoldPrice · 定制版预览"
         window.contentView = NSHostingView(rootView: GoldPriceView(store: store))
         window.center()

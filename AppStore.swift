@@ -40,8 +40,13 @@ final class AppStore: ObservableObject {
     @Published private(set) var channelErrors: [String: String] = [:]
     @Published var message: String?
     @Published var activeTab: AppTab = .market
-    @Published var chartMarket: TrendMarket = .domestic
-    @Published var chartRange: TrendRange = .day
+    @Published private(set) var trendSnapshot = TrendSnapshot(history: [], range: .day)
+    @Published var chartMarket: TrendMarket = .domestic {
+        didSet { if oldValue != chartMarket { updateTrendSnapshot() } }
+    }
+    @Published var chartRange: TrendRange = .day {
+        didSet { if oldValue != chartRange { updateTrendSnapshot() } }
+    }
     @Published private(set) var notificationAllowed = false
     @Published private(set) var loginEnabled = false
 
@@ -88,6 +93,7 @@ final class AppStore: ObservableObject {
             message = "本地数据读取失败，已停止写入以保护原文件。请先导出数据备份。"
         }
         chartMarket = preferences.displayChannel.isDomestic ? .domestic : .london
+        updateTrendSnapshot()
         loginEnabled = Bundle.main.bundleIdentifier != nil && SMAppService.mainApp.status == .enabled
     }
 
@@ -168,6 +174,7 @@ final class AppStore: ObservableObject {
         async let london: Void = loadHistory(market: .london, forceDaily: forceDaily)
         _ = await (domestic, london)
         historyFetchedAt = Date()
+        updateTrendSnapshot()
         save()
     }
 
@@ -205,19 +212,21 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func makeTrendSnapshot(market: TrendMarket, range: TrendRange) -> TrendSnapshot {
+        let history = market == .domestic
+            ? (range == .day ? domesticMinutes : domesticDaily)
+            : (range == .day ? londonMinutes : londonDaily)
+        return TrendSnapshot(history: history, range: range)
+    }
+
+    private func updateTrendSnapshot() {
+        let snapshot = makeTrendSnapshot(market: chartMarket, range: chartRange)
+        if snapshot != trendSnapshot { trendSnapshot = snapshot }
+    }
+
     func chartPoints(market: TrendMarket, range: TrendRange) -> [PricePoint] {
-        let points: [PricePoint]
-        if market == .london {
-            points = range == .day ? londonMinutes : londonDaily
-        } else {
-            points = range == .day ? domesticMinutes : domesticDaily
-        }
-        let start = range.start()
-        let filtered = points.filter { (start == nil || $0.date >= start!) && $0.date <= Date() }
-        // Bound drawing work for the 30+ year chart while retaining first and last.
-        guard filtered.count > 600 else { return filtered }
-        let step = Double(filtered.count - 1) / 599
-        return (0..<600).map { filtered[Int((Double($0) * step).rounded())] }
+        if market == chartMarket && range == chartRange { return trendSnapshot.points }
+        return makeTrendSnapshot(market: market, range: range).points
     }
 
     func addTrade(_ trade: Trade) throws {

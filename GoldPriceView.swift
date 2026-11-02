@@ -14,6 +14,11 @@ enum AppTab: String, CaseIterable {
     }
 }
 
+enum PanelLayout {
+    static let width: CGFloat = 380
+    static let height: CGFloat = 580
+}
+
 enum Palette {
     static let gold = Color(red: 0.72, green: 0.48, blue: 0.15)
     static let lilac = Color(red: 0.58, green: 0.46, blue: 0.75)
@@ -36,12 +41,12 @@ private func number(_ text: String) -> Decimal? {
 private struct SoftCard: ViewModifier {
     var tint: Color = .clear
     func body(content: Content) -> some View {
-        content.padding(16)
+        content.padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.surface)
-            .overlay(RoundedRectangle(cornerRadius: 18).fill(tint.opacity(0.06)))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.045), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14).fill(tint.opacity(0.06)))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.045), lineWidth: 1))
     }
 }
 
@@ -49,7 +54,7 @@ private struct GoldBuddy: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 14)
             .fill(LinearGradient(colors: [Color(red: 1, green: 0.86, blue: 0.49), Color(red: 0.98, green: 0.73, blue: 0.38)], startPoint: .topLeading, endPoint: .bottomTrailing))
-            .frame(width: 43, height: 43)
+            .frame(width: 32, height: 32)
             .rotationEffect(.degrees(-5))
             .overlay(VStack(spacing: 6) {
                 HStack(spacing: 10) { Circle().frame(width: 3.5, height: 3.5); Circle().frame(width: 3.5, height: 3.5) }
@@ -66,11 +71,11 @@ struct GoldPriceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 9) {
                 GoldBuddy()
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("GoldPrice").font(.system(size: 20, weight: .bold, design: .rounded))
-                    Text("招行黄金账户 · 伦敦现货").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("GoldPrice").font(.system(size: 16, weight: .bold, design: .rounded))
+                    Text("招行黄金账户 · 伦敦现货").font(.system(size: 9)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { Task { await store.refresh(forceHistory: true) } } label: {
@@ -80,21 +85,21 @@ struct GoldPriceView: View {
                     }.frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain).disabled(store.isRefreshing).help("刷新行情")
-            }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 18)
+            }.padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
 
             HStack(spacing: 5) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
                     Button { store.activeTab = tab } label: {
                         Label(tab.rawValue, systemImage: tab.icon)
                             .font(.system(size: 12, weight: .semibold))
-                            .frame(maxWidth: .infinity).padding(.vertical, 9)
+                            .frame(maxWidth: .infinity).padding(.vertical, 7)
                             .background(store.activeTab == tab ? Palette.surface : .clear)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                             .foregroundStyle(store.activeTab == tab ? Palette.gold : .secondary)
                     }.buttonStyle(.plain)
                 }
             }.padding(4).background(Color.primary.opacity(0.045)).clipShape(RoundedRectangle(cornerRadius: 14))
-                .padding(.horizontal, 20).padding(.bottom, 12)
+                .padding(.horizontal, 12).padding(.bottom, 9)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -109,12 +114,11 @@ struct GoldPriceView: View {
                     switch store.activeTab {
                     case .market:
                         MarketScreen(store: store)
-                            .id("\(store.chartMarket.rawValue)-\(store.chartRange.rawValue)")
                     case .portfolio: PortfolioScreen(store: store)
                     case .alerts: AlertsScreen(store: store)
                     case .settings: SettingsScreen(store: store)
                     }
-                }.padding(.horizontal, 20).padding(.bottom, 18)
+                }.padding(.horizontal, 12).padding(.bottom, 10)
             }
 
             HStack {
@@ -122,9 +126,9 @@ struct GoldPriceView: View {
                 Text(store.isRefreshing ? "正在更新行情" : "每 \(store.preferences.refreshSeconds) 秒更新")
                 Spacer()
                 Button("退出") { NSApplication.shared.terminate(nil) }.buttonStyle(.plain)
-            }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 23).padding(.vertical, 12)
+            }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 15).padding(.vertical, 8)
         }
-        .frame(width: 540, height: 700)
+        .frame(width: PanelLayout.width, height: PanelLayout.height)
         .background(Palette.background)
         .tint(Palette.gold)
     }
@@ -133,25 +137,15 @@ struct GoldPriceView: View {
 @MainActor
 private struct MarketScreen: View {
     @ObservedObject var store: AppStore
-    @State private var inspectedPoint: PricePoint?
-
-    private var points: [PricePoint] { store.chartPoints(market: store.chartMarket, range: store.chartRange) }
-    private var bounds: ClosedRange<Double> {
-        let low = points.map(\.value).min() ?? 0
-        let high = points.map(\.value).max() ?? 1
-        let padding = max((high - low) * 0.15, max(low * 0.0005, 0.01))
-        return max(0, low - padding)...(high + padding)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 sourceButton("国内黄金", market: .domestic)
                 sourceButton("伦敦现货", market: .london)
                 Spacer()
             }
             if store.chartMarket == .domestic {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     QuoteCard(store: store, channel: .cmbBuy)
                     QuoteCard(store: store, channel: .cmbSell)
                 }
@@ -164,103 +158,172 @@ private struct MarketScreen: View {
                 Label(error, systemImage: "chart.line.downtrend.xyaxis").font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("金价趋势").font(.system(size: 15, weight: .semibold))
-                        Text("\(store.chartMarket.title) · \(store.chartMarket.unit)").font(.system(size: 10)).foregroundStyle(.secondary)
-                        if store.chartMarket == .domestic {
-                            Text("公开历史行情 · 东方财富").font(.system(size: 9)).foregroundStyle(Palette.gold)
-                        }
-                    }
-                    Spacer()
-                    if let inspectedPoint {
-                        VStack(alignment: .trailing, spacing: 3) {
-                            Text(String(format: "%.2f", inspectedPoint.value)).font(.system(size: 14, weight: .semibold, design: .rounded)).monospacedDigit()
-                            Text(inspectedPoint.date, format: .dateTime.month().day().hour().minute()).font(.system(size: 9)).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                HStack(spacing: 3) {
-                    ForEach(TrendRange.allCases) { range in
-                        Button { store.chartRange = range; inspectedPoint = nil } label: {
-                            Text(range.rawValue).font(.system(size: 11, weight: .medium))
-                                .frame(maxWidth: .infinity).padding(.vertical, 7)
-                                .background(store.chartRange == range ? Palette.gold.opacity(0.13) : .clear)
-                                .foregroundStyle(store.chartRange == range ? Palette.gold : .secondary)
-                                .clipShape(Capsule())
-                        }.buttonStyle(.plain)
-                    }
-                }
-
-                if points.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: store.isLoadingHistory ? "hourglass" : "chart.line.uptrend.xyaxis").font(.system(size: 26)).foregroundStyle(Palette.gold.opacity(0.6))
-                        Text(store.isLoadingHistory ? "正在读取历史行情…" : "这个时段暂无公开行情，可刷新重试")
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity).frame(height: 190)
-                } else {
-                    Chart {
-                        ForEach(points) { point in
-                            AreaMark(x: .value("时间", point.date), yStart: .value("下界", bounds.lowerBound), yEnd: .value("价格", point.value))
-                                .foregroundStyle(LinearGradient(colors: [Palette.gold.opacity(0.19), Palette.gold.opacity(0.01)], startPoint: .top, endPoint: .bottom))
-                            LineMark(x: .value("时间", point.date), y: .value("价格", point.value))
-                                .foregroundStyle(Palette.gold).lineStyle(StrokeStyle(lineWidth: 2))
-                        }
-                        if points.count == 1, let point = points.first {
-                            PointMark(x: .value("时间", point.date), y: .value("价格", point.value)).foregroundStyle(Palette.gold)
-                        }
-                        if let inspectedPoint {
-                            RuleMark(x: .value("时间", inspectedPoint.date)).foregroundStyle(Palette.gold.opacity(0.3))
-                            PointMark(x: .value("时间", inspectedPoint.date), y: .value("价格", inspectedPoint.value)).foregroundStyle(Palette.gold)
-                        }
-                    }
-                    .chartYScale(domain: bounds)
-                    .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) }
-                    .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
-                    .chartOverlay { proxy in
-                        GeometryReader { geometry in
-                            Rectangle().fill(.clear).contentShape(Rectangle()).onContinuousHover { phase in
-                                switch phase {
-                                case .active(let location):
-                                    let x = location.x - geometry[proxy.plotAreaFrame].origin.x
-                                    if let date: Date = proxy.value(atX: x) {
-                                        inspectedPoint = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
-                                    }
-                                case .ended: inspectedPoint = nil
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 190)
-                    if let first = points.first, let last = points.last {
-                        HStack {
-                            Text(first.date, format: .dateTime.year().month().day())
-                            Spacer()
-                            Text(last.date, format: .dateTime.year().month().day())
-                        }.font(.system(size: 9)).foregroundStyle(.tertiary)
-                    }
-                }
-
-                if store.chartMarket == .domestic {
-                    Text("东方财富 Au99.99 \(store.chartRange == .day ? "分钟线 · 北京时间" : "日线 · 全部从数据源最早记录起")。国内趋势为上金所 Au99.99 行情，与上方招行买卖报价存在价差。")
-                        .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text(store.chartRange == .day ? "东方财富 XAU 分钟线 · 北京时间" : "东方财富 XAU 日线· “全部”从数据源最早记录起")
-                        .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }.modifier(SoftCard())
+            TrendCard(snapshot: store.trendSnapshot, market: store.chartMarket, range: store.chartRange,
+                      isLoading: store.isLoadingHistory, selectRange: { store.chartRange = $0 })
+                .id("\(store.chartMarket.rawValue)-\(store.chartRange.rawValue)")
         }
     }
 
     private func sourceButton(_ title: String, market: TrendMarket) -> some View {
         let selected = store.chartMarket == market
-        return Button { store.chartMarket = market; inspectedPoint = nil } label: {
-            Text(title).font(.system(size: 12, weight: selected ? .semibold : .regular))
-                .padding(.horizontal, 12).padding(.vertical, 7)
+        return Button { store.chartMarket = market } label: {
+            Text(title).font(.system(size: 11, weight: selected ? .semibold : .regular))
+                .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(selected ? Palette.gold.opacity(0.11) : .clear)
                 .foregroundStyle(selected ? Palette.gold : .secondary).clipShape(Capsule())
         }.buttonStyle(.plain)
+    }
+}
+
+private struct TrendCard: View {
+    let snapshot: TrendSnapshot
+    let market: TrendMarket
+    let range: TrendRange
+    let isLoading: Bool
+    let selectRange: (TrendRange) -> Void
+    @State private var inspectedPoint: PricePoint?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("金价趋势").font(.system(size: 13, weight: .semibold))
+                    Text("\(market.title) · \(market.unit)").font(.system(size: 9)).foregroundStyle(.secondary)
+                    Text("公开历史 · 东方财富").font(.system(size: 8)).foregroundStyle(Palette.gold)
+                }
+                Spacer(minLength: 4)
+                if let inspectedPoint {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(String(format: "%.2f", inspectedPoint.value))
+                            .font(.system(size: 13, weight: .semibold, design: .rounded)).monospacedDigit()
+                        Text(inspectedPoint.date, format: .dateTime.year().month().day().hour().minute())
+                            .font(.system(size: 8)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+            HStack(spacing: 2) {
+                ForEach(TrendRange.allCases) { item in
+                    Button { selectRange(item) } label: {
+                        Text(item.rawValue).font(.system(size: 10, weight: .medium))
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
+                            .background(range == item ? Palette.gold.opacity(0.13) : .clear)
+                            .foregroundStyle(range == item ? Palette.gold : .secondary)
+                            .clipShape(Capsule())
+                    }.buttonStyle(.plain)
+                }
+            }
+            if snapshot.points.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: isLoading ? "hourglass" : "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 22)).foregroundStyle(Palette.gold.opacity(0.6))
+                    Text(isLoading ? "正在读取历史行情…" : "暂无行情，可刷新重试")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity).frame(height: 145)
+            } else {
+                TrendPlot(snapshot: snapshot, onInspection: { inspectedPoint = $0 })
+                    .equatable().frame(height: 145)
+                if let first = snapshot.points.first, let last = snapshot.points.last {
+                    HStack {
+                        Text(first.date, format: .dateTime.year().month().day())
+                        Spacer()
+                        Text(last.date, format: .dateTime.year().month().day())
+                    }.font(.system(size: 8)).foregroundStyle(.tertiary)
+                }
+            }
+            Text(market == .domestic
+                 ? "上金所 Au99.99 行情，与招行买卖报价存在价差。"
+                 : "伦敦现货 XAU · 美元/盎司")
+                .font(.system(size: 9)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }.modifier(SoftCard())
+    }
+}
+
+/// Hover changes only the overlay and readout; keep the 600-point plot intact.
+private struct TrendPlot: View, Equatable {
+    let snapshot: TrendSnapshot
+    let onInspection: (PricePoint?) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.snapshot == rhs.snapshot }
+
+    var body: some View {
+        Chart {
+            ForEach(snapshot.points) { point in
+                AreaMark(x: .value("时间", point.date), yStart: .value("下界", snapshot.bounds.lowerBound), yEnd: .value("价格", point.value))
+                    .foregroundStyle(LinearGradient(colors: [Palette.gold.opacity(0.19), Palette.gold.opacity(0.01)], startPoint: .top, endPoint: .bottom))
+                LineMark(x: .value("时间", point.date), y: .value("价格", point.value))
+                    .foregroundStyle(Palette.gold).lineStyle(StrokeStyle(lineWidth: 1.5))
+            }
+            if snapshot.points.count == 1, let point = snapshot.points.first {
+                PointMark(x: .value("时间", point.date), y: .value("价格", point.value)).foregroundStyle(Palette.gold)
+            }
+        }
+        .chartYScale(domain: snapshot.bounds)
+        .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(anchor: .top) {
+                    if let date = value.as(Date.self) {
+                        Text(date, format: axisFormat).font(.system(size: 8)).fixedSize()
+                    }
+                }
+            }
+        }
+        .chartOverlay { proxy in
+            ChartInspectionOverlay(proxy: proxy, snapshot: snapshot, onInspection: onInspection)
+        }
+    }
+
+    private var axisFormat: Date.FormatStyle {
+        let span = (snapshot.points.last?.date.timeIntervalSince(snapshot.points.first?.date ?? Date())) ?? 0
+        let locale = Locale(identifier: "en_US_POSIX")
+        if span > 370 * 86400 { return .dateTime.year().locale(locale) }
+        if span > 2 * 86400 { return .dateTime.month(.twoDigits).day(.twoDigits).locale(locale) }
+        return .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(locale)
+    }
+}
+
+private struct ChartInspectionOverlay: View {
+    let proxy: ChartProxy
+    let snapshot: TrendSnapshot
+    let onInspection: (PricePoint?) -> Void
+    @State private var selected: PricePoint?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let plot = geometry[proxy.plotAreaFrame]
+            ZStack(alignment: .topLeading) {
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            guard plot.contains(location), let date: Date = proxy.value(atX: location.x - plot.minX) else {
+                                inspect(nil); return
+                            }
+                            inspect(snapshot.nearest(to: date))
+                        case .ended: inspect(nil)
+                        }
+                    }
+                if let selected, let x = proxy.position(forX: selected.date), let y = proxy.position(forY: selected.value) {
+                    Path { path in
+                        path.move(to: CGPoint(x: plot.minX + x, y: plot.minY))
+                        path.addLine(to: CGPoint(x: plot.minX + x, y: plot.maxY))
+                    }.stroke(Palette.gold.opacity(0.3), lineWidth: 1).allowsHitTesting(false)
+                    Circle().fill(Palette.gold).frame(width: 5, height: 5)
+                        .position(x: plot.minX + x, y: plot.minY + y).allowsHitTesting(false)
+                }
+            }
+        }
+        .onChange(of: snapshot) { value in
+            if let selected { inspect(value.nearest(to: selected.date)) }
+        }
+    }
+
+    private func inspect(_ point: PricePoint?) {
+        guard point != selected else { return }
+        selected = point
+        onInspection(point)
     }
 }
 
@@ -270,7 +333,7 @@ private struct QuoteCard: View {
     let channel: QuoteChannel
     private var quote: MarketQuote? { store.quote(channel) }
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(channel == .london ? "伦敦现货金" : channel == .cmbBuy ? "客户买入价" : "客户卖出价")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
@@ -281,7 +344,7 @@ private struct QuoteCard: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(quote.map { money($0.price) } ?? "—")
-                    .font(.system(size: channel.isDomestic ? 29 : 34, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .font(.system(size: channel.isDomestic ? 24 : 28, weight: .semibold, design: .rounded)).monospacedDigit()
                     .minimumScaleFactor(0.6).lineLimit(1)
                 Text(channel.unit).font(.system(size: 9)).foregroundStyle(.secondary)
             }.textSelection(.enabled)
@@ -419,7 +482,7 @@ private struct TradeEditor: View {
                 Spacer()
                 Button("保存记录") { save() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
-        }.padding(24).frame(width: 410).tint(Palette.gold)
+        }.padding(18).frame(width: 350).tint(Palette.gold)
             .onAppear { price = store.quote(kind == .buy ? .cmbBuy : .cmbSell).map { money($0.price) } ?? "" }
     }
 
@@ -457,7 +520,7 @@ private struct AlertsScreen: View {
                 Label("到价提醒", systemImage: "bell.badge").font(.system(size: 15, weight: .semibold))
                 Picker("金价渠道", selection: $channel) { ForEach(QuoteChannel.allCases) { Text($0.title).tag($0) } }
                 HStack {
-                    Picker("条件", selection: $direction) { ForEach(AlertDirection.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 145)
+                    Picker("条件", selection: $direction) { ForEach(AlertDirection.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 125)
                     TextField("目标价格", text: $target).textFieldStyle(.roundedBorder)
                     Text(channel.unit).font(.system(size: 10)).foregroundStyle(.secondary)
                 }
